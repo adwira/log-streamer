@@ -8,49 +8,55 @@ function ExecutionCard({ execution }) {
 
   useEffect(() => {
     if (!execution.started_at) return;
-    
-    // Update elapsed time every second
-    const updateElapsed = () => {
-      setElapsed(formatElapsed(parseInt(execution.started_at)));
-    };
-    
+    const updateElapsed = () => setElapsed(formatElapsed(parseInt(execution.started_at)));
     updateElapsed();
     const timer = setInterval(updateElapsed, 1000);
     return () => clearInterval(timer);
   }, [execution.started_at]);
 
   const startedTime = execution.started_at ? formatTime(parseInt(execution.started_at)) : '--:--';
-  const currentNode = execution.currentNode;
+
+  // Get the most recently active node
+  const logs = execution.logs || [];
+  const lastNodeLog = [...logs].reverse().find(l =>
+    ['node_start', 'node_started'].includes(l.message_id || l.messageId)
+  );
+  const currentNode = lastNodeLog
+    ? (lastNodeLog.node_name || lastNodeLog.nodeName)
+    : null;
+
+  // Workflow name fallback
+  const workflowName = execution.workflow_name || execution.workflowName || 'Memuat...';
 
   return (
-    <div className="card">
+    <div className="card card--active">
       <div className="card-header">
         <div className="workflow-name">
-          <span>🔄</span> {execution.workflow_name || 'Unknown Workflow'}
+          <span className="spinning">🔄</span>
+          <span>{workflowName}</span>
         </div>
         <div className="workflow-meta">
-          <div>Mulai {startedTime}</div>
-          <div style={{ color: 'var(--accent-blue)', fontWeight: 500 }}>{elapsed}</div>
+          <div>Mulai <strong>{startedTime}</strong></div>
+          {elapsed && <div className="elapsed-badge">{elapsed}</div>}
         </div>
       </div>
-      
+
       {currentNode && (
         <div className="current-node">
-          Langkah aktif: {currentNode}
+          <span className="current-node-dot"></span>
+          Langkah aktif: <strong>{currentNode}</strong>
         </div>
       )}
-      
-      <LogStream 
-        logs={execution.logs || []} 
-        maxVisible={expanded ? 1000 : 5} 
+
+      <LogStream
+        logs={logs}
+        maxVisible={expanded ? 500 : 6}
+        showAll={expanded}
       />
-      
-      {(execution.logs || []).length > 5 && (
-        <button 
-          className="btn-text" 
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? '▲ Sembunyikan' : '▼ Lihat semua log'}
+
+      {logs.length > 0 && (
+        <button className="btn-text" onClick={() => setExpanded(!expanded)}>
+          {expanded ? '▲ Sembunyikan detail' : `▼ Lihat semua ${logs.length} log`}
         </button>
       )}
     </div>

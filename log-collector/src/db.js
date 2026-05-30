@@ -146,4 +146,14 @@ async function cleanupOldLogs(retentionDays) {
   `, [thresholdMs]);
 }
 
-module.exports = { migrate, upsertExecution, insertLog, getExecutions, getExecutionWithLogs, getActiveExecutions, cleanupOldLogs };
+// Backfill workflow_name for executions that don't have one yet
+async function patchWorkflowName(executionId, workflowName) {
+  if (!executionId || !workflowName) return;
+  await pool.query(`
+    UPDATE n8n_logs_executions
+    SET workflow_name = $2
+    WHERE id = $1 AND (workflow_name IS NULL OR workflow_name = '')
+  `, [executionId, workflowName]);
+}
+
+module.exports = { migrate, upsertExecution, insertLog, getExecutions, getExecutionWithLogs, getActiveExecutions, cleanupOldLogs, patchWorkflowName };

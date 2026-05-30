@@ -86,26 +86,28 @@ export function useWebSocket(url) {
       case 'log_entry':
         setActiveExecutions(prev => prev.map(exec => {
           if (exec.id === data.executionId) {
-            const newLogs = [...(exec.logs || []), {
-              id: Date.now() + Math.random(), // pseudo id for React key
+            const newLog = {
+              id: Date.now() + Math.random(),
               timestamp: data.timestamp,
               level: data.level,
               node_name: data.nodeName,
               message_id: data.messageId,
-              message: data.message
-            }];
+              message: data.message,
+              workflow_name: data.workflowName
+            };
             
-            // Keep maximum 100 logs in memory for active view
-            if (newLogs.length > 100) {
-              newLogs.shift();
-            }
+            const newLogs = [...(exec.logs || []), newLog];
+            if (newLogs.length > 100) newLogs.shift();
             
             let currentNode = exec.currentNode;
-            if (data.messageId === 'node_executing') {
+            if (['node_start', 'node_started'].includes(data.messageId)) {
               currentNode = data.nodeName;
             }
+
+            // Backfill workflow name if we got it from the log entry
+            const workflowName = data.workflowName || exec.workflow_name;
             
-            return { ...exec, logs: newLogs, currentNode };
+            return { ...exec, logs: newLogs, currentNode, workflow_name: workflowName };
           }
           return exec;
         }));
