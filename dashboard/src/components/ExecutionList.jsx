@@ -73,7 +73,7 @@ function LogModal({ execution, logs, onClose }) {
         {/* Log toolbar */}
         <div className="modal-log-toolbar">
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Log terbaru di atas — tekan ESC atau klik area luar untuk tutup
+            Log dari awal sampai akhir — tekan ESC atau klik area luar untuk tutup
           </span>
         </div>
 
@@ -214,7 +214,7 @@ function ExecutionRow({ execution, logs, onExpand }) {
             )}
             <div className="exec-details-toolbar">
               <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                {sourceLogs.length} entri log (terbaru di atas)
+                {sourceLogs.length} entri log (lama → baru)
               </span>
               <button className="btn-fullscreen" onClick={handleFullscreen}>
                 ⛶ Layar penuh

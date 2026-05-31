@@ -41,11 +41,11 @@ function LogStream({ logs, showAll = false, compact = true, maxVisible = 100 }) 
         return isImportantLog(msgId) || l.level === 'error' || l.level === 'warn';
       });
 
-  // 3. Urutkan terbaru di atas
-  const sorted = [...filtered].reverse();
-
-  // 4. Limit tampilan
-  const displayLogs = sorted.slice(0, maxVisible);
+  // 3. Tampilkan ascending (lama → baru), seperti terminal
+  // Ambil maxVisible entri terbaru dari ujung array
+  const displayLogs = filtered.length > maxVisible
+    ? filtered.slice(filtered.length - maxVisible)
+    : filtered;
 
   return (
     <div className={`log-stream ${compact ? 'compact' : ''}`}>
