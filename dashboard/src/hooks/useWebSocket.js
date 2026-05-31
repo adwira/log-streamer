@@ -2,12 +2,21 @@ import { useState, useEffect, useRef } from 'react';
 
 export function useWebSocket(url) {
   const [connected, setConnected] = useState(false);
-  const [activeExecutions, setActiveExecutions] = useState([]);
-  const [recentExecutions, setRecentExecutions] = useState([]);
+  // allExecutions: semua execution (aktif maupun selesai) digabung, terbaru di atas
+  const [allExecutions, setAllExecutions] = useState([]);
   
   const ws = useRef(null);
   const retryCount = useRef(0);
-  const maxRetries = 5;
+  const maxRetries = 10;
+
+  // Helper: merge dan urutkan semua execution terbaru di atas
+  const mergeAndSort = (executions) => {
+    return [...executions].sort((a, b) => {
+      const tsA = parseInt(a.started_at || 0);
+      const tsB = parseInt(b.started_at || 0);
+      return tsB - tsA; // descending
+    });
+  };
 
   const connect = () => {
     ws.current = new WebSocket(url);
@@ -40,6 +49,7 @@ export function useWebSocket(url) {
   };
 
   const scheduleReconnect = () => {
+    if (retryCount.current >= maxRetries) return;
     const backoff = Math.min(Math.pow(2, retryCount.current) * 1000, 30000);
     retryCount.current += 1;
     console.log(`Reconnecting to WS in ${backoff}ms...`);
@@ -48,43 +58,52 @@ export function useWebSocket(url) {
 
   const handleMessage = (data) => {
     switch (data.type) {
-      case 'initial_state':
-        setActiveExecutions(data.activeExecutions || []);
-        setRecentExecutions(data.recentExecutions || []);
+      case 'initial_state': {
+        // Gabungkan active + recent dari initial state
+        const active = (data.activeExecutions || []).map(e => ({ ...e, status: e.status || 'running' }));
+        const recent = (data.recentExecutions || []);
+        // Deduplicate by id, prefer active version if exists
+        const byId = new Map();
+        for (const e of recent) byId.set(e.id, e);
+        for (const e of active) byId.set(e.id, e); // active overrides recent
+        setAllExecutions(mergeAndSort([...byId.values()]));
         break;
-        
-      case 'execution_started':
-        setActiveExecutions(prev => {
-          const newExec = {
-            id: data.executionId,
-            workflow_name: data.workflowName,
-            started_at: data.startedAt,
-            status: 'running',
-            logs: []
-          };
-          return [newExec, ...prev.filter(e => e.id !== data.executionId)];
+      }
+
+      case 'execution_started': {
+        const newExec = {
+          id: data.executionId,
+          workflow_name: data.workflowName,
+          started_at: data.startedAt,
+          status: 'running',
+          logs: [],
+        };
+        setAllExecutions(prev => {
+          const filtered = prev.filter(e => e.id !== data.executionId);
+          return mergeAndSort([newExec, ...filtered]);
         });
         break;
-        
-      case 'execution_finished':
-        setActiveExecutions(prev => {
-          const finishedExec = prev.find(e => e.id === data.executionId);
-          if (finishedExec) {
-            // Move from active to recent
-            const toRecent = {
-              ...finishedExec,
-              status: data.status,
-              duration_ms: data.durationMs,
-              finished_at: Date.now()
-            };
-            setRecentExecutions(recent => [toRecent, ...recent].slice(0, 20));
-          }
-          return prev.filter(e => e.id !== data.executionId);
+      }
+
+      case 'execution_finished': {
+        setAllExecutions(prev => {
+          return mergeAndSort(prev.map(exec => {
+            if (exec.id === data.executionId) {
+              return {
+                ...exec,
+                status: data.status,
+                duration_ms: data.durationMs,
+                finished_at: Date.now(),
+              };
+            }
+            return exec;
+          }));
         });
         break;
-        
-      case 'log_entry':
-        setActiveExecutions(prev => prev.map(exec => {
+      }
+
+      case 'log_entry': {
+        setAllExecutions(prev => prev.map(exec => {
           if (exec.id === data.executionId) {
             const newLog = {
               id: Date.now() + Math.random(),
@@ -93,36 +112,36 @@ export function useWebSocket(url) {
               node_name: data.nodeName,
               message_id: data.messageId,
               message: data.message,
-              workflow_name: data.workflowName
+              workflow_name: data.workflowName,
             };
-            
+
             const newLogs = [...(exec.logs || []), newLog];
-            if (newLogs.length > 100) newLogs.shift();
-            
+            if (newLogs.length > 200) newLogs.shift();
+
             let currentNode = exec.currentNode;
             if (['node_start', 'node_started'].includes(data.messageId)) {
               currentNode = data.nodeName;
             }
 
-            // Backfill workflow name if we got it from the log entry
             const workflowName = data.workflowName || exec.workflow_name;
-            
             return { ...exec, logs: newLogs, currentNode, workflow_name: workflowName };
           }
           return exec;
         }));
         break;
+      }
     }
   };
 
   useEffect(() => {
     connect();
     return () => {
-      if (ws.current) {
-        ws.current.close();
-      }
+      if (ws.current) ws.current.close();
     };
   }, [url]);
 
-  return { connected, activeExecutions, recentExecutions };
+  // Limit to 50 most recent executions
+  const displayExecutions = allExecutions.slice(0, 50);
+
+  return { connected, allExecutions: displayExecutions };
 }

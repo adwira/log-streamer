@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatTime } from '../utils/timeFormatter';
-import { translateLog, isImportantLog } from '../utils/logTranslator';
+import { translateLog, isImportantLog, isInternalLog, deduplicateLogs } from '../utils/logTranslator';
 
 const LEVEL_CLASS = {
   error: 'log-level-error',
@@ -11,26 +11,44 @@ const LEVEL_CLASS = {
   trace: 'log-level-debug',
 };
 
-function LogStream({ logs, maxVisible, showAll = false }) {
+/**
+ * LogStream — tampilkan logs terbaru di paling atas.
+ * 
+ * Props:
+ *  - logs: array log entries
+ *  - showAll: jika true, tampilkan semua termasuk internal events
+ *  - compact: styling compact (dalam card)
+ *  - maxVisible: batas jumlah log yang ditampilkan
+ */
+function LogStream({ logs, showAll = false, compact = true, maxVisible = 100 }) {
   if (!logs || logs.length === 0) {
     return (
-      <div className="log-stream log-empty">
-        <span style={{ color: 'var(--text-muted)' }}>Tidak ada log untuk ditampilkan.</span>
+      <div className={`log-stream ${compact ? 'compact' : ''} log-empty`}>
+        Tidak ada log untuk ditampilkan.
       </div>
     );
   }
 
-  // Filter: jika tidak showAll, hanya tampilkan log yang penting
-  const filtered = showAll
-    ? logs
-    : logs.filter(l => isImportantLog(l.message_id || l.messageId) || l.level === 'error' || l.level === 'warn');
+  // 1. Deduplication — hapus entri dengan message_id identik dalam window waktu dekat
+  const deduped = deduplicateLogs(logs);
 
-  const displayLogs = filtered.length > maxVisible
-    ? filtered.slice(filtered.length - maxVisible)
-    : filtered;
+  // 2. Filter berdasarkan mode
+  const filtered = showAll
+    ? deduped
+    : deduped.filter(l => {
+        const msgId = l.message_id || l.messageId || 'generic';
+        if (isInternalLog(msgId)) return false; // sembunyikan internal events
+        return isImportantLog(msgId) || l.level === 'error' || l.level === 'warn';
+      });
+
+  // 3. Urutkan terbaru di atas
+  const sorted = [...filtered].reverse();
+
+  // 4. Limit tampilan
+  const displayLogs = sorted.slice(0, maxVisible);
 
   return (
-    <div className="log-stream">
+    <div className={`log-stream ${compact ? 'compact' : ''}`}>
       {displayLogs.map((log, idx) => {
         const timeStr = formatTime(parseInt(log.timestamp || Date.now()));
         const msgId = log.message_id || log.messageId || 'generic';
