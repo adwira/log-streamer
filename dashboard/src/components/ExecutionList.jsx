@@ -222,9 +222,9 @@ function ExecutionRow({ execution, logs, onExpand }) {
             </div>
             <LogStream
               logs={sourceLogs}
-              showAll={false}
+              showAll={true}
               compact={true}
-              maxVisible={20}
+              maxVisible={500}
             />
             {sourceLogs.length > 5 && (
               <button className="btn-text" onClick={handleFullscreen}>
